@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Defaults
+key="$AWS_ACCESS_KEY"
+secret="$AWS_SECRET_KEY"
+timeout=$(( 60 * 5 )) # seconds until expire
+
+help=$(basename $0)' [-k AWS_KEY] [-s AWS_SECRET] [-t TIMEOUT_SECS] uri\n
+Generate the S3 Authenticated Query Request.\n
+-k AWS_KEY Defaults to value of $AWS_ACCESS_KEY\n
+-s AWS_SECRET Defaults to value of $AWS_SECRET_KEY\n
+-t TIMEOUT_SECS Defaults to '$timeout'\n
+'
+
+while getopts ":hk:s:t:" i; do
+	case $i in
+	h)	echo -e $help; exit 1;;
+	k)	key=$OPTARG;;
+	s)	secret=$OPTARG;;
+	t)	timeout=$OPTARG;;
+	esac
+done
+shift $(( OPTIND-1 ))
+uri=$1
+
+[ -z "$key" ] && echo -e "missing -k key\n"$help >&2 && exit 1
+[ -z "$secret" ] && echo -e "missing -s secret\n"$help >&2 && exit 1
+[ -z "$timeout" ] && echo -e "missing -t timeout\n"$help >&2 && exit 1
+[ -z "$uri" ] && echo -e "missing uri\n"$help >&2 && exit 1
+
+base=$(echo $uri|perl -pe 's|(.*//[^/]*/).*|\1|')
+bucket=$(echo $uri|perl -pe 's|.*//[^/]*/([^/]*).*|\1|')
+path=$(echo $uri|perl -pe 's|.*//[^/]*/[^/]*(.*)|\1|')
+
+now=$(date -u +%s)
+expire=$(( $now + $timeout ))
+
+signature=$(
+	printf "GET\n\n\n$expire\n/$bucket$path" | 
+	openssl dgst -sha1 -binary -hmac $secret | 
+	openssl base64 |
+	perl -lpe 's/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/seg'
+	)
+
+url="$base$bucket$path?AWSAccessKeyId=$key&Signature=$signature&Expires=$expire"
+#echo $url >&2
+echo $url

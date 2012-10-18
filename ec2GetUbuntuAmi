@@ -1,0 +1,38 @@
+#!/usr/local/bin/node
+// from http://nodejs.org/docs/v0.5.2/api/http.html#http.request
+// http://cloud.ubuntu.com/ami-locator/releasesTable
+
+var http = require('http');
+var path = require('path');
+
+var options = {
+  host: 'cloud.ubuntu.com',
+  port: 80,
+  path: '/ami-locator/releasesTable',
+  method: 'GET'
+};
+
+if (process.argv.length!=6){
+	console.log("usage: "+path.basename(process.argv[1])+" zone(us-west-2) name(precise) arch(i386) ebs(ebs)" );
+} else {
+	http.get(options,function(res){
+		var json=''
+		res.on('data',function(chunk){
+			json+=chunk;
+		});
+		res.on('end',function(){
+			var table=JSON.parse(json);
+			for(var i=0; i<table.aaData.length;i++){
+				if (
+					process.argv[2]===table.aaData[i][0] &&
+					process.argv[3]===table.aaData[i][1] &&
+					process.argv[4]===table.aaData[i][2] &&
+					process.argv[5]===table.aaData[i][3]
+				){
+					ami=table.aaData[i][5].replace(/<[^>]*>/g,"");
+					console.log(ami);
+				}
+			}
+		});
+	});
+}
